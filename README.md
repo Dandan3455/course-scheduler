@@ -1,3 +1,3 @@
-访问方法：
+访问方法：<br>
 1.在线访问，直接点击：https://dandan3455.github.io/course-scheduler/ <br>
 2.下载course-scheduler文件夹到本地，然后双击html文件
