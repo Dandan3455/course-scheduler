@@ -4,6 +4,7 @@ let allOriginalSolutions = []; // All valid solutions (unfiltered)
 let currentSolutionIndex = 0;
 let coursesData = null;
 let pinnedSections = {}; // { courseName: sectionId }
+let selectedCoursesSet = new Set(); // Set of selected course names
 
 // 星期映射
 const dayNames = {
@@ -114,19 +115,16 @@ function calculateSchedules() {
         // Clear pins when calculating new schedules
         pinnedSections = {};
         
-        // Generate all possible schedules (without pin filtering)
-        allOriginalSolutions = generateAllSchedules(coursesData.courses);
-        allSolutions = allOriginalSolutions; // Initially show all
-
-        if (allSolutions.length === 0) {
-            showError('No valid schedules found! All combinations have time conflicts.');
-            return;
-        }
-
+        // Initialize selected courses (all selected by default)
+        selectedCoursesSet = new Set(coursesData.courses.map(c => c.name));
+        
+        // Display course selector
+        displayCourseSelector();
+        
+        // Generate schedules for selected courses
+        recalculateSchedules();
+        
         // Display results
-        hideError();
-        currentSolutionIndex = 0;
-        updateSolutionDisplay();
         resultsSection.style.display = 'block';
 
     } catch (e) {
@@ -208,9 +206,6 @@ function updateSolutionDisplay() {
 
     const schedule = allSolutions[currentSolutionIndex];
     
-    // 显示选中的课程列表
-    displaySelectedCourses(schedule);
-    
     // 显示课程表
     displayTimetable(schedule);
 
@@ -219,18 +214,64 @@ function updateSolutionDisplay() {
     nextBtn.disabled = currentSolutionIndex === allSolutions.length - 1;
 }
 
-// Display selected courses
-function displaySelectedCourses(schedule) {
-    const container = document.getElementById('selectedCourses');
-    let html = '<h3>Courses in this schedule:</h3>';
+// Display course selector with checkboxes
+function displayCourseSelector() {
+    const container = document.getElementById('courseCheckboxes');
+    let html = '';
     
-    schedule.forEach(item => {
-        const isPinned = pinnedSections[item.courseName] === item.sectionId;
-        const pin = isPinned ? ' 📍' : '';
-        html += `<div class="course-item">📖 ${item.courseName} - Section ${item.sectionId}${pin}</div>`;
+    coursesData.courses.forEach(course => {
+        const isChecked = selectedCoursesSet.has(course.name);
+        const checkedAttr = isChecked ? 'checked' : '';
+        html += `
+            <div class="course-checkbox-item">
+                <label>
+                    <input type="checkbox" ${checkedAttr} onchange="toggleCourseSelection('${course.name}')">
+                    <span class="course-name">📖 ${course.name}</span>
+                    <span class="section-count">(${course.sections.length} sections)</span>
+                </label>
+            </div>
+        `;
     });
     
     container.innerHTML = html;
+}
+
+// Toggle course selection
+function toggleCourseSelection(courseName) {
+    if (selectedCoursesSet.has(courseName)) {
+        selectedCoursesSet.delete(courseName);
+        // Also unpin if this course was pinned
+        delete pinnedSections[courseName];
+    } else {
+        selectedCoursesSet.add(courseName);
+    }
+    
+    recalculateSchedules();
+}
+
+// Recalculate schedules based on selected courses
+function recalculateSchedules() {
+    if (selectedCoursesSet.size === 0) {
+        showError('Please select at least one course!');
+        return;
+    }
+    
+    // Filter courses to only include selected ones
+    const selectedCourses = coursesData.courses.filter(c => selectedCoursesSet.has(c.name));
+    
+    // Generate all possible schedules for selected courses
+    allOriginalSolutions = generateAllSchedules(selectedCourses);
+    allSolutions = filterSolutionsByPins(allOriginalSolutions);
+    
+    if (allSolutions.length === 0) {
+        showError('No valid schedules found! All combinations have time conflicts.');
+        return;
+    }
+    
+    // Display results
+    hideError();
+    currentSolutionIndex = 0;
+    updateSolutionDisplay();
 }
 
 // Display timetable
@@ -257,7 +298,7 @@ function displayTimetable(schedule) {
                 const isPinned = pinnedSections[course.courseName] === course.sectionId;
                 const pin = isPinned ? '<span class="pin-indicator">📍</span>' : '';
                 const pinnedClass = isPinned ? ' pinned-cell' : '';
-                html += `<td class="course-cell clickable-cell${pinnedClass}" onclick="togglePin('${course.courseName}', '${course.sectionId}')">${pin}<div>${course.courseName}<br>Section ${course.sectionId}</div></td>`;
+                html += `<td class="course-cell clickable-cell${pinnedClass}" onclick="togglePin('${course.courseName}', '${course.sectionId}')">${pin}<div>${course.courseName} (${course.type})<br>Section ${course.sectionId}</div></td>`;
             } else {
                 html += '<td></td>';
             }
@@ -272,27 +313,40 @@ function displayTimetable(schedule) {
 
 // 获取所有涉及的时间段
 function getTimeSlots(schedule) {
-    const hours = new Set();
+    let minHour = 8;  // Default start
+    let maxHour = 18; // Default end
     
+    // Find actual time range from schedule
     schedule.forEach(item => {
         const allTimes = [...item.lec, ...item.lab];
         allTimes.forEach(time => {
-            for (let h = time.start; h < time.end; h++) {
-                hours.add(h);
-            }
+            if (time.start < minHour) minHour = time.start;
+            if (time.end > maxHour) maxHour = time.end;
         });
     });
-
-    return Array.from(hours).sort((a, b) => a - b);
+    
+    // Generate continuous time range
+    const hours = [];
+    for (let h = minHour; h < maxHour; h++) {
+        hours.push(h);
+    }
+    
+    return hours;
 }
 
 // 查找特定时间的课程
 function findCourseAtTime(schedule, day, hour) {
     for (const item of schedule) {
-        const allTimes = [...item.lec, ...item.lab];
-        for (const time of allTimes) {
+        // Check lectures
+        for (const time of item.lec) {
             if (time.day === day && hour >= time.start && hour < time.end) {
-                return item;
+                return { ...item, type: 'LEC' };
+            }
+        }
+        // Check labs
+        for (const time of item.lab) {
+            if (time.day === day && hour >= time.start && hour < time.end) {
+                return { ...item, type: 'LAB' };
             }
         }
     }
