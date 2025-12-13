@@ -96,6 +96,24 @@ h1 {
     background: #dee2e6;
 }
 
+.clickable-cell {
+    cursor: pointer;
+    position: relative;
+}
+
+.pin-indicator {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.pinned-cell {
+    background: #f0f4ff !important;
+    border: 2px solid #667eea !important;
+}
+
 .input-section {
     margin-bottom: 30px;
 }

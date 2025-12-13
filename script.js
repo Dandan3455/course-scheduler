@@ -1,7 +1,9 @@
 // 全局变量
-let allSolutions = [];
+let allSolutions = []; // Currently displayed solutions (filtered by pins)
+let allOriginalSolutions = []; // All valid solutions (unfiltered)
 let currentSolutionIndex = 0;
 let coursesData = null;
+let pinnedSections = {}; // { courseName: sectionId }
 
 // 星期映射
 const dayNames = {
@@ -55,6 +57,35 @@ calculateBtn.addEventListener('click', calculateSchedules);
 prevBtn.addEventListener('click', () => changeSolution(-1));
 nextBtn.addEventListener('click', () => changeSolution(1));
 
+// Merge separated LEC and LAB sections into complete sections
+function mergeSections(sections) {
+    const merged = {};
+    
+    for (const section of sections) {
+        let baseId = section.id;
+        
+        // Only remove trailing 1 or 2 if the ID is 3+ characters (like "021", "022")
+        // Don't modify 2-character IDs (like "01", "02")
+        if (section.id.length >= 3 && /[12]$/.test(section.id)) {
+            baseId = section.id.slice(0, -1);
+        }
+        
+        if (!merged[baseId]) {
+            merged[baseId] = {
+                id: baseId,
+                lec: [],
+                lab: []
+            };
+        }
+        
+        // Merge lec and lab times
+        merged[baseId].lec = [...merged[baseId].lec, ...section.lec];
+        merged[baseId].lab = [...merged[baseId].lab, ...section.lab];
+    }
+    
+    return Object.values(merged);
+}
+
 // 主要计算函数
 function calculateSchedules() {
     try {
@@ -72,8 +103,20 @@ function calculateSchedules() {
             return;
         }
 
-        // Generate all possible schedules
-        allSolutions = generateAllSchedules(coursesData.courses);
+        // Auto-merge sections (combine LEC and LAB if separated)
+        coursesData.courses = coursesData.courses.map(course => {
+            return {
+                name: course.name,
+                sections: mergeSections(course.sections)
+            };
+        });
+
+        // Clear pins when calculating new schedules
+        pinnedSections = {};
+        
+        // Generate all possible schedules (without pin filtering)
+        allOriginalSolutions = generateAllSchedules(coursesData.courses);
+        allSolutions = allOriginalSolutions; // Initially show all
 
         if (allSolutions.length === 0) {
             showError('No valid schedules found! All combinations have time conflicts.');
@@ -106,6 +149,8 @@ function generateAllSchedules(courses) {
         }
 
         const course = courses[index];
+        
+        // Try all sections (no pin filtering here)
         for (const section of course.sections) {
             currentSchedule.push({
                 courseName: course.name,
@@ -180,7 +225,9 @@ function displaySelectedCourses(schedule) {
     let html = '<h3>Courses in this schedule:</h3>';
     
     schedule.forEach(item => {
-        html += `<div class="course-item">📖 ${item.courseName} - Section ${item.sectionId}</div>`;
+        const isPinned = pinnedSections[item.courseName] === item.sectionId;
+        const pin = isPinned ? ' 📍' : '';
+        html += `<div class="course-item">📖 ${item.courseName} - Section ${item.sectionId}${pin}</div>`;
     });
     
     container.innerHTML = html;
@@ -207,7 +254,10 @@ function displayTimetable(schedule) {
         dayOrder.forEach(day => {
             const course = findCourseAtTime(schedule, day, hour);
             if (course) {
-                html += `<td class="course-cell">${course.courseName}<br>Section ${course.sectionId}</td>`;
+                const isPinned = pinnedSections[course.courseName] === course.sectionId;
+                const pin = isPinned ? '<span class="pin-indicator">📍</span>' : '';
+                const pinnedClass = isPinned ? ' pinned-cell' : '';
+                html += `<td class="course-cell clickable-cell${pinnedClass}" onclick="togglePin('${course.courseName}', '${course.sectionId}')">${pin}<div>${course.courseName}<br>Section ${course.sectionId}</div></td>`;
             } else {
                 html += '<td></td>';
             }
@@ -268,4 +318,48 @@ function showError(message) {
 
 function hideError() {
     errorDiv.style.display = 'none';
+}
+
+// Toggle pin status for a section
+function togglePin(courseName, sectionId) {
+    if (pinnedSections[courseName] === sectionId) {
+        // Unpin
+        delete pinnedSections[courseName];
+    } else {
+        // Pin
+        pinnedSections[courseName] = sectionId;
+    }
+    
+    // Filter original solutions based on pinned sections
+    allSolutions = filterSolutionsByPins(allOriginalSolutions);
+    
+    if (allSolutions.length === 0) {
+        showError('No valid schedules found with current pinned sections!');
+        return;
+    }
+    
+    // Reset to first solution
+    hideError();
+    currentSolutionIndex = 0;
+    updateSolutionDisplay();
+}
+
+// Filter solutions to only include those matching all pinned sections
+function filterSolutionsByPins(solutions) {
+    if (Object.keys(pinnedSections).length === 0) {
+        return solutions; // No pins, return all
+    }
+    
+    return solutions.filter(schedule => {
+        // Check if this schedule matches all pinned sections
+        for (const courseName in pinnedSections) {
+            const pinnedSectionId = pinnedSections[courseName];
+            const courseInSchedule = schedule.find(item => item.courseName === courseName);
+            
+            if (!courseInSchedule || courseInSchedule.sectionId !== pinnedSectionId) {
+                return false; // This schedule doesn't match the pin
+            }
+        }
+        return true; // All pins match
+    });
 }

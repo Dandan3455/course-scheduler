@@ -46,11 +46,14 @@
   ]
 }
 
-Notes:
-- If there's no lab, use an empty array [] for lab
+IMPORTANT RULES:
+- Each section MUST include BOTH its lecture (lec) AND lab times together
+- DO NOT separate lecture and lab into different sections
+- For example, if Section 02 has "021-LEC" and "022-LAB", combine them into ONE section with id "02"
+- If a section has no lab, use an empty array [] for lab
 - Use 24-hour format integers for time (e.g., 10 means 10:00)
 - Day abbreviations: mo=Monday, tu=Tuesday, we=Wednesday, th=Thursday, fr=Friday
-- If a section has multiple lectures or labs, put them all in the corresponding array
+- If a section has multiple lecture or lab times, put them all in the corresponding array
 
 Only output JSON, no other explanations.</textarea>
                 <button id="copyPrompt" class="btn-primary">Copy Prompt</button>
@@ -65,14 +68,16 @@ Only output JSON, no other explanations.</textarea>
 
         <div id="results" class="results-section" style="display: none;">
             <h2>✅ Valid Schedules</h2>
-            <div class="solution-controls">
-                <button id="prevSolution" class="btn-nav">← Previous</button>
-                <span id="solutionInfo">Schedule <span id="currentSolution">1</span> / <span id="totalSolutions">0</span></span>
-                <button id="nextSolution" class="btn-nav">Next →</button>
-            </div>
             
             <div id="scheduleDisplay">
                 <div id="selectedCourses" class="selected-courses"></div>
+                
+                <div class="solution-controls">
+                    <button id="prevSolution" class="btn-nav">← Previous</button>
+                    <span id="solutionInfo">Schedule <span id="currentSolution">1</span> / <span id="totalSolutions">0</span></span>
+                    <button id="nextSolution" class="btn-nav">Next →</button>
+                </div>
+                
                 <div id="timetable" class="timetable"></div>
             </div>
         </div>
